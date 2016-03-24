@@ -156,7 +156,6 @@ static int wh_callback_init (wh_callback_t *cb) /* {{{ */
         curl_easy_setopt (cb->curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt (cb->curl, CURLOPT_USERAGENT, COLLECTD_USERAGENT);
 
-        cb->headers = NULL;
         cb->headers = curl_slist_append (cb->headers, "Accept:  */*");
         if (cb->format == WH_FORMAT_JSON)
                 cb->headers = curl_slist_append (cb->headers, "Content-Type: application/json");
@@ -540,6 +539,22 @@ static int config_set_format (wh_callback_t *cb, /* {{{ */
         return (0);
 } /* }}} int config_set_format */
 
+static int wh_config_append_string (const char *name, struct curl_slist **dest, /* {{{ */
+    oconfig_item_t *ci)
+{
+  if ((ci->values_num != 1) || (ci->values[0].type != OCONFIG_TYPE_STRING))
+  {
+    WARNING ("write_http plugin: `%s' needs exactly one string argument.", name);
+    return (-1);
+  }
+
+  *dest = curl_slist_append(*dest, ci->values[0].value.string);
+  if (*dest == NULL)
+    return (-1);
+
+  return (0);
+} /* }}} int wh_config_append_string */
+
 static int wh_config_node (oconfig_item_t *ci) /* {{{ */
 {
         wh_callback_t *cb;
@@ -643,6 +658,8 @@ static int wh_config_node (oconfig_item_t *ci) /* {{{ */
                         status = cf_util_get_int (child, &cb->timeout);
                 else if (strcasecmp ("LogHttpError", child->key) == 0)
                         status = cf_util_get_boolean (child, &cb->log_http_error);
+                else if (strcasecmp ("Header", child->key) == 0)
+                        status = wh_config_append_string ("Header", &cb->headers, child);
                 else
                 {
                         ERROR ("write_http plugin: Invalid configuration "
