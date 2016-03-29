@@ -550,6 +550,22 @@ static int config_set_format (wh_cfg_t *cfg, /* {{{ */
         return (0);
 } /* }}} int config_set_format */
 
+static int wh_config_append_string (const char *name, struct curl_slist **dest, /* {{{ */
+    oconfig_item_t *ci)
+{
+  if ((ci->values_num != 1) || (ci->values[0].type != OCONFIG_TYPE_STRING))
+  {
+    WARNING ("write_http plugin: `%s' needs exactly one string argument.", name);
+    return (-1);
+  }
+
+  *dest = curl_slist_append(*dest, ci->values[0].value.string);
+  if (*dest == NULL)
+    return (-1);
+
+  return (0);
+} /* }}} int wh_config_append_string */
+
 static int wh_config_node (oconfig_item_t *ci) /* {{{ */
 {
         int buffer_size = 0;
@@ -650,6 +666,8 @@ static int wh_config_node (oconfig_item_t *ci) /* {{{ */
                         status = cf_util_get_int (child, &wh_cfg->timeout);
                 else if (strcasecmp ("LogHttpError", child->key) == 0)
                         status = cf_util_get_boolean (child, &wh_cfg->log_http_error);
+                else if (strcasecmp ("Header", child->key) == 0)
+                        status = wh_config_append_string ("Header", &cb->headers, child);
                 else {
                         ERROR ("write_http plugin: Invalid configuration "
                                         "option: %s.", child->key);
