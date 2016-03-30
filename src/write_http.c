@@ -94,6 +94,7 @@ struct wh_cfg_s
         int timeout;
         int format;
         size_t send_buffer_size;
+        struct curl_slist *headers;
 };
 typedef struct wh_cfg_s wh_cfg_t;
 
@@ -152,6 +153,23 @@ fail:
         wh_ctx_destructor(ctx);
         return NULL;
 } /* }}} wh_ctx_t *wh_get_ctx */
+
+static struct curl_slist *wh_slist_duplicate (struct curl_slist *list) /* {{{ */
+{
+        struct curl_slist *output = NULL;
+        struct curl_slist *temp = NULL;
+
+        while (list) {
+                temp = curl_slist_append (output, list->data);
+                if (temp == NULL) {
+                        curl_slist_free_all (output);
+                        return NULL;
+                }
+                output = temp;
+                list = list->next;
+        }
+        return output;
+} /* }}} struct curl_slist *wh_slist_duplicate */
 
 static void wh_log_http_error (wh_ctx_t *ctx) /* {{{ */
 {
@@ -248,6 +266,9 @@ static int wh_ctx_init (wh_ctx_t *ctx) /* {{{ */
         }
 
         wh_reset_buffer (ctx);
+
+        /* Copy the global config headers into ctx->headers */
+        ctx->headers = wh_slist_duplicate (wh_cfg->headers);
 
         tmp = curl_slist_append (ctx->headers, "Accept:  */*");
         if (tmp == NULL) {
@@ -553,16 +574,19 @@ static int config_set_format (wh_cfg_t *cfg, /* {{{ */
 static int wh_config_append_string (const char *name, struct curl_slist **dest, /* {{{ */
     oconfig_item_t *ci)
 {
+  struct curl_slist *temp = NULL;
+
   if ((ci->values_num != 1) || (ci->values[0].type != OCONFIG_TYPE_STRING))
   {
     WARNING ("write_http plugin: `%s' needs exactly one string argument.", name);
     return (-1);
   }
 
-  *dest = curl_slist_append(*dest, ci->values[0].value.string);
-  if (*dest == NULL)
+  temp = curl_slist_append(*dest, ci->values[0].value.string);
+  if (temp == NULL)
     return (-1);
 
+  *dest = temp;
   return (0);
 } /* }}} int wh_config_append_string */
 
@@ -667,7 +691,7 @@ static int wh_config_node (oconfig_item_t *ci) /* {{{ */
                 else if (strcasecmp ("LogHttpError", child->key) == 0)
                         status = cf_util_get_boolean (child, &wh_cfg->log_http_error);
                 else if (strcasecmp ("Header", child->key) == 0)
-                        status = wh_config_append_string ("Header", &cb->headers, child);
+                        status = wh_config_append_string ("Header", &wh_cfg->headers, child);
                 else {
                         ERROR ("write_http plugin: Invalid configuration "
                                         "option: %s.", child->key);
